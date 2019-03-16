@@ -33,10 +33,12 @@ If you like my work and want to support future projects, you can make a donation
 - Grand Theft Auto: Vice City Stories [ULUS10160] (v3.00)
 - Grand Theft Auto: Liberty City Stories [ULUS10041] (v3.00)
 
-## Known bugs
+## Known issues
 
 - If enabled, other games may not be able to launch
 - Not compatible with cheat plugins
+
+If you notice weird positions/proportions/sizes in the game using this plugin, please submit the issue here by taking a screenshot once with this plugin enabled and once disabled.
 
 ## Credits
 
