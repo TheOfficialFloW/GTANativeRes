@@ -78,6 +78,9 @@ STMOD_HANDLER previous;
 void sceGuEnd(unsigned int *list);
 
 u32 *ge_list_offset;
+u32 turn_offset, ge_list_1_offset, ge_list_2_offset;
+
+int lcs = 0;
 
 int (* initGu)(int mode, int pixelformat, int width, int height, int pitch);
 int initGuPatched(int mode, int pixelformat, int width, int height, int pitch) {
@@ -85,18 +88,38 @@ int initGuPatched(int mode, int pixelformat, int width, int height, int pitch) {
   return initGu(0, PIXELFORMAT, WIDTH, HEIGHT, PITCH);
 }
 
-int (* drawDisplay)();
-int drawDisplayPatched() {
-  sceGuStart(0, (void *)*ge_list_offset);
+void (* drawDisplay)();
+void drawDisplayPatched() {
+  u32 turn, curr, list;
+
+  if (lcs) {
+    turn = *(u32 *)turn_offset;
+  } else {
+    asm volatile ("lw %0, -8716($gp)" : "=r" (turn));
+  }
+
+  if (!turn) {
+    curr = ge_list_1_offset;
+    list = *(u32 *)(ge_list_1_offset + 4);
+  } else {
+    curr = ge_list_2_offset;
+    list = *(u32 *)(ge_list_2_offset + 4);
+  }
+
+  if (!lcs) {
+    *(u32 *)(ge_list_1_offset + 4) = CUSTOM_GE_LIST;
+    *(u32 *)(ge_list_2_offset + 4) = CUSTOM_GE_LIST;
+  }
+
+  drawDisplay();
+
+  sceGuStart(0, (void *)(*(u32 *)curr - 8));
   sceGuTexSync();
   sceGuCopyImage(PIXELFORMAT, 0, 0, WIDTH, HEIGHT, PITCH,
                  (void *)(0x40000000 | (VRAM + VRAM_DRAW_BUFFER_OFFSET)),
                  0, 0, PITCH, (void *)(0x40000000 | DISPLAY_BUFFER));
   sceGuTexSync();
-  // sceGuFinish();
-  sceGuEnd(ge_list_offset);
-
-  return drawDisplay();
+  sceGuFinish();
 }
 
 void setTexture(u32 *list, void *buffer) {
@@ -187,6 +210,8 @@ SceInt64 sceKernelGetSystemTimeWidePatched(void) {
 // ULUS10160
 void PatchVCS(u32 text_addr) {
   ge_list_offset = (u32 *)(text_addr + 0x003C3370);
+  ge_list_1_offset = text_addr + 0x00672200;
+  ge_list_2_offset = text_addr + 0x006719C0;
 
   // Redirect vram offsets
   u32 store_draw_buffer = _lw(text_addr + 0x00202B18);
@@ -223,7 +248,7 @@ void PatchVCS(u32 text_addr) {
   HIJACK_FUNCTION(text_addr + 0x002029DC, initGuPatched, initGu);
 
   // Patch draw display
-  HIJACK_FUNCTION(text_addr + 0x00202FE0, drawDisplayPatched, drawDisplay);
+  HIJACK_FUNCTION(text_addr + 0x00203C0C, drawDisplayPatched, drawDisplay);
 
   // Ignore drawings to display
   _sw(0, text_addr + 0x00204268);
@@ -304,6 +329,9 @@ void PatchVCS(u32 text_addr) {
 // ULUS10041
 void PatchLCS(u32 text_addr) {
   ge_list_offset = (u32 *)(text_addr + 0x0038ACD0);
+  turn_offset = text_addr + 0x00352AE8;
+  ge_list_1_offset = text_addr + 0x00659340;
+  ge_list_2_offset = text_addr + 0x00658B00;
 
   // Redirect vram offsets
   u32 store_draw_buffer = _lw(text_addr + 0x002B0100);
@@ -335,7 +363,7 @@ void PatchLCS(u32 text_addr) {
   HIJACK_FUNCTION(text_addr + 0x002AFF64, initGuPatched, initGu);
 
   // Patch draw display
-  HIJACK_FUNCTION(text_addr + 0x002AF27C, drawDisplayPatched, drawDisplay);
+  HIJACK_FUNCTION(text_addr + 0x002B02F8, drawDisplayPatched, drawDisplay);
 
   // Ignore drawings to display
   _sw(0, text_addr + 0x002B098C);
@@ -482,8 +510,10 @@ int OnModuleStart(SceModule2 *mod) {
 
   if (strcmp(modname, "GTA3") == 0) {
     if (strcmp((char *)(text_addr + 0x00307F54), "GTA3") == 0) {
+      lcs = 1;
       PatchLCS(text_addr);
     } else if (strcmp((char *)(text_addr + 0x0036F8D8), "GTA3") == 0) {
+      lcs = 0;
       PatchVCS(text_addr);
     }
 
