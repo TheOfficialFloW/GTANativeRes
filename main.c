@@ -66,10 +66,8 @@ PSP_MODULE_INFO("GTANativeResolution", 0, 1, 0);
 #define VRAM_DRAW_BUFFER_OFFSET 0
 #define VRAM_DEPTH_BUFFER_OFFSET 0x00100000
 
-#define VRAM_TEXTURE_BUFFER 0x0A300000
-#define VRAM_BACKUP_BUFFER 0x0A400000
-
-#define CUSTOM_GE_LIST 0x0A500000
+#define BACKUP_BUFFER 0x0A300000
+#define CUSTOM_GE_LIST 0x0A400000
 
 #define TEXTURE_MODE_CMD 0xC8D00002 // original: 0xC8000002
 
@@ -77,10 +75,8 @@ STMOD_HANDLER previous;
 
 void sceGuEnd(unsigned int *list);
 
-u32 *ge_list_offset;
-u32 turn_offset, ge_list_1_offset, ge_list_2_offset;
-
-int lcs = 0;
+u32 *ge_list_offset, *texture_buffer;
+u32 ge_list_1_offset, ge_list_2_offset;
 
 int (* initGu)(int mode, int pixelformat, int width, int height, int pitch);
 int initGuPatched(int mode, int pixelformat, int width, int height, int pitch) {
@@ -90,31 +86,14 @@ int initGuPatched(int mode, int pixelformat, int width, int height, int pitch) {
 
 void (* drawDisplay)();
 void drawDisplayPatched() {
-  u32 turn, curr, list;
+  *(u32 *)(ge_list_1_offset + 4) = CUSTOM_GE_LIST;
+  *(u32 *)(ge_list_2_offset + 4) = CUSTOM_GE_LIST;
 
-  if (lcs) {
-    turn = *(u32 *)turn_offset;
-  } else {
-    asm volatile ("lw %0, -8716($gp)" : "=r" (turn));
-  }
+  sceGuStart(0, (void *)CUSTOM_GE_LIST);
 
-  if (!turn) {
-    curr = ge_list_1_offset;
-    list = *(u32 *)(ge_list_1_offset + 4);
-  } else {
-    curr = ge_list_2_offset;
-    list = *(u32 *)(ge_list_2_offset + 4);
-  }
-
-  if (!lcs) {
-    *(u32 *)(ge_list_1_offset + 4) = CUSTOM_GE_LIST;
-    *(u32 *)(ge_list_2_offset + 4) = CUSTOM_GE_LIST;
-  }
-
-  drawDisplay();
-
-  sceGuStart(0, (void *)(*(u32 *)curr - 8));
   sceGuTexSync();
+  sceGuTexImage(0, 0, 0, 0, (void *)VRAM);
+  sceGuEnable(GU_DITHER);
   sceGuCopyImage(PIXELFORMAT, 0, 0, WIDTH, HEIGHT, PITCH,
                  (void *)(0x40000000 | (VRAM + VRAM_DRAW_BUFFER_OFFSET)),
                  0, 0, PITCH, (void *)(0x40000000 | DISPLAY_BUFFER));
@@ -138,7 +117,7 @@ void drawTexturePatched(u32 *list, int x0, int y0, int u0, int v0, int x1, int y
   sceGuStart(0, (void *)*list);
   sceGuCopyImage(0, 0, 0, 64, 64, 64,
                  (void *)(0x40000000 | (VRAM + VRAM_DEPTH_BUFFER_OFFSET)),
-                 0, 0, 64, (void *)(0x40000000 | VRAM_BACKUP_BUFFER));
+                 0, 0, 64, (void *)(0x40000000 | BACKUP_BUFFER));
   sceGuTexSync();
   sceGuDrawBuffer(0, (void *)VRAM_DEPTH_BUFFER_OFFSET, 64);
   sceGuEnd(list);
@@ -160,10 +139,10 @@ void drawTexture2Patched(u32 *list, int x0, int y0, int u0, int v0, int x1, int 
   sceGuTexSync();
   sceGuCopyImage(0, 0, 0, 64, 64, 64,
                  (void *)(0x40000000 | (VRAM + VRAM_DEPTH_BUFFER_OFFSET)),
-                 0, 0, 64, (void *)(0x40000000 | VRAM_TEXTURE_BUFFER));
+                 0, 0, 64, (void *)(0x40000000 | *texture_buffer));
   sceGuTexSync();
   sceGuCopyImage(0, 0, 0, 64, 64, 64,
-                 (void *)(0x40000000 | VRAM_BACKUP_BUFFER),
+                 (void *)(0x40000000 | BACKUP_BUFFER),
                  0, 0, 64, (void *)(0x40000000 | (VRAM + VRAM_DEPTH_BUFFER_OFFSET)));
   sceGuTexSync();
   sceGuEnd(list);
@@ -184,7 +163,7 @@ int drawReflectionPatched(int a0) {
 
   return res;
 }
-/*
+
 #define FPS_VAR 0x4BCDEF04
 
 SceInt64 cur_micros = 0, delta_micros = 0, last_micros = 0;
@@ -206,9 +185,11 @@ SceInt64 sceKernelGetSystemTimeWidePatched(void) {
 
   return cur_micros;
 }
-*/
+
 // ULUS10160
 void PatchVCS(u32 text_addr) {
+  // gp: 0x003ADD60
+  texture_buffer = (u32 *)(text_addr + 0x003A9850);
   ge_list_offset = (u32 *)(text_addr + 0x003C3370);
   ge_list_1_offset = text_addr + 0x00672200;
   ge_list_2_offset = text_addr + 0x006719C0;
@@ -237,23 +218,11 @@ void PatchVCS(u32 text_addr) {
   _sw(0x3C050000 | (GE_LIST_SIZE >> 16), text_addr + 0x00202EB0);
   _sw(0x34A50000 | (GE_LIST_SIZE & 0xFFFF), text_addr + 0x00202EB4);
 
-  // Redirect texture buffer
-  u32 store_texture_buffer = _lw(text_addr + 0x00277B2C);
-  _sw(0x3C040000 | (VRAM_TEXTURE_BUFFER >> 16), text_addr + 0x00277B2C);
-  _sw(0x34840000 | (VRAM_TEXTURE_BUFFER & 0xFFFF), text_addr + 0x00277B30);
-  _sw(store_texture_buffer, text_addr + 0x00277B34);
-  _sw(0x2404FFFF, text_addr + 0x00277B38);
-
   // Patch GU init
   HIJACK_FUNCTION(text_addr + 0x002029DC, initGuPatched, initGu);
 
   // Patch draw display
   HIJACK_FUNCTION(text_addr + 0x00203C0C, drawDisplayPatched, drawDisplay);
-
-  // Ignore drawings to display
-  _sw(0, text_addr + 0x00204268);
-  _sw(0, text_addr + 0x0020432C);
-  _sw(0, text_addr + 0x00204398);
 
   // Fix map scissoring
 
@@ -320,16 +289,16 @@ void PatchVCS(u32 text_addr) {
   _sh(TEXTURE_MODE_CMD >> 16, text_addr + 0x002785FC);
   _sh(TEXTURE_MODE_CMD & 0xFFFF, text_addr + 0x0027860C);
 
-  // MAKE_CALL(text_addr + 0x002030D4, sceKernelGetSystemTimeWidePatched);
+  MAKE_CALL(text_addr + 0x002030D4, sceKernelGetSystemTimeWidePatched);
 
   // Cap to 20FPS
-  // _sh(3, text_addr + 0x002030B4);
+  _sh(3, text_addr + 0x002030B4);
 }
 
 // ULUS10041
 void PatchLCS(u32 text_addr) {
+  texture_buffer = (u32 *)(text_addr + 0x00354AC0);
   ge_list_offset = (u32 *)(text_addr + 0x0038ACD0);
-  turn_offset = text_addr + 0x00352AE8;
   ge_list_1_offset = text_addr + 0x00659340;
   ge_list_2_offset = text_addr + 0x00658B00;
 
@@ -352,23 +321,11 @@ void PatchLCS(u32 text_addr) {
   _sw(0x3C050000 | (GE_LIST_SIZE >> 16), text_addr + 0x002AF124);
   _sw(0x34A50000 | (GE_LIST_SIZE & 0xFFFF), text_addr + 0x002AF128);
 
-  // Redirect texture buffer
-  u32 store_texture_buffer = _lw(text_addr + 0x002A7290);
-  _sw(0x3C040000 | (VRAM_TEXTURE_BUFFER >> 16), text_addr + 0x002A7290);
-  _sw(0x34840000 | (VRAM_TEXTURE_BUFFER & 0xFFFF), text_addr + 0x002A7294);
-  _sw(store_texture_buffer, text_addr + 0x002A7298);
-  _sw(0x2404FFFF, text_addr + 0x002A729C);
-
   // Patch GU init
   HIJACK_FUNCTION(text_addr + 0x002AFF64, initGuPatched, initGu);
 
   // Patch draw display
   HIJACK_FUNCTION(text_addr + 0x002B02F8, drawDisplayPatched, drawDisplay);
-
-  // Ignore drawings to display
-  _sw(0, text_addr + 0x002B098C);
-  _sw(0, text_addr + 0x002B0A60);
-  _sw(0, text_addr + 0x002B0ACC);
 
   // Fix maps cursor
   _sw(0x34040000 | 272, text_addr + 0x002d6fc8);
@@ -498,7 +455,7 @@ void PatchLCS(u32 text_addr) {
   _sh(TEXTURE_MODE_CMD >> 16, text_addr + 0x002A7DC4);
   _sh(TEXTURE_MODE_CMD & 0xFFFF, text_addr + 0x002A7DD4);
 
-  // MAKE_CALL(text_addr + 0x002AF398, sceKernelGetSystemTimeWidePatched);
+  MAKE_CALL(text_addr + 0x002AF398, sceKernelGetSystemTimeWidePatched);
 
   // Cap to 20FPS
   // _sh(3, text_addr + 0x002AF378);
@@ -510,10 +467,8 @@ int OnModuleStart(SceModule2 *mod) {
 
   if (strcmp(modname, "GTA3") == 0) {
     if (strcmp((char *)(text_addr + 0x00307F54), "GTA3") == 0) {
-      lcs = 1;
       PatchLCS(text_addr);
     } else if (strcmp((char *)(text_addr + 0x0036F8D8), "GTA3") == 0) {
-      lcs = 0;
       PatchVCS(text_addr);
     }
 
