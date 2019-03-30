@@ -380,6 +380,10 @@ void PatchLCS(u32 text_addr) {
   _sw(0x34040000 | 480, text_addr + 0x002DB7A8);
   _sw(0x34040000 | 480, text_addr + 0x002DB858);
 
+  // Fix radio station icons in menu
+  _sw(0x34040000 | 480, text_addr + 0x002dedbc);
+  _sw(0x34040000 | 480, text_addr + 0x002df0b4);
+
   // Fix map scissoring
   _sw(0x24E7FFA0, text_addr + 0x002DB808);
   _sw(0x24E7FFA0, text_addr + 0x002DB8B8);
