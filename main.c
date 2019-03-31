@@ -269,6 +269,15 @@ void PatchVCS(u32 text_addr) {
   _sw(0x34040000 | 512, text_addr + 0x002A4400);
   _sw(0x34040000 | 320, text_addr + 0x002A4424);
 
+  // Fix pager proportions
+  _sw(0x34040000 | 512, text_addr + 0x001b8974);
+  _sw(0x34040000 | 512, text_addr + 0x001b89e4);
+  _sw(0x34040000 | 320, text_addr + 0x001b89f8);
+
+  // Fix pager text placement
+  _sw(0x34040000 | 512, text_addr + 0x001b8b40);
+  _sw(0x34050000 | 320, text_addr + 0x001b8b44);
+
   // Fix reflection
   _sh(PIXELFORMAT, text_addr + 0x00277EBC);
   _sh(PITCH, text_addr + 0x00277F2C);
@@ -292,7 +301,7 @@ void PatchVCS(u32 text_addr) {
   MAKE_CALL(text_addr + 0x002030D4, sceKernelGetSystemTimeWidePatched);
 
   // Cap to 20FPS
-  _sh(3, text_addr + 0x002030B4);
+  // _sh(3, text_addr + 0x002030B4);
 }
 
 // ULUS10041
