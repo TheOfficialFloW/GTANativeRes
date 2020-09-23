@@ -14,17 +14,20 @@ If you like my work and want to support future projects, you can make a donation
 - via [paypal](https://www.paypal.me/flowsupport/20)
 - via [patreon](https://www.patreon.com/TheOfficialFloW)
 
+## Changelog v0.3
+- Updated for Adrenaline v7.
+
 ## Changelog v0.2
 - Fixed bug where the savedata menu was not shown.
 
 ## Requirements
 
-- [Adrenaline v6.9](https://github.com/TheOfficialFloW/Adrenaline) or higher.
+- [Adrenaline v7](https://github.com/TheOfficialFloW/Adrenaline) or higher.
 - Option `Force high memory layout` disabled (in `Recovery menu -> Advanced -> Advanced configuration`).
 
 ## Installation
 
-- Download [gta_native.prx](https://github.com/TheOfficialFloW/GTANativeResolution/releases/download/v0.2/gta_native.prx).
+- Download [gta_native.prx](https://github.com/TheOfficialFloW/GTANativeResolution/releases/download/v0.3/gta_native.prx).
 - Copy it to `ux0:pspemu/seplugins/`.
 - Write this line to `ux0:pspemu/seplugins/game.txt`:
   ```
