@@ -392,6 +392,11 @@ void PatchLCS(u32 text_addr) {
   // Fix radio station icons in menu
   _sw(0x34040000 | 480, text_addr + 0x002dedbc);
   _sw(0x34040000 | 480, text_addr + 0x002df0b4);
+  
+  // Fix Stats
+  _sw(0x34050000 | 480, text_addr + 0x002DF9F0); //values
+  _sw(0x34050000 | 480, text_addr + 0x002DFC2C); //rating value
+  _sw(0x34040000 | 480, text_addr + 0x002DFC50); //rating name
 
   // Fix map scissoring
   _sw(0x24E7FFA0, text_addr + 0x002DB808);
